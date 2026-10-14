@@ -15,10 +15,26 @@ function applyDnsServers() {
   logger.debug({ servers: env.DNS_SERVERS }, 'Using custom DNS servers');
 }
 
+// Builds every model's indexes before the API takes traffic. Mongoose otherwise builds
+// them in the background and swallows failures, so e.g. the events text index could be
+// missing and GET /events?q=... would fail with "text index required for $text query".
+async function ensureIndexes() {
+  for (const model of Object.values(mongoose.models)) {
+    try {
+      await model.createCollection();
+      await model.createIndexes();
+    } catch (err) {
+      logger.error({ err, model: model.modelName }, 'Index build failed');
+      throw err;
+    }
+  }
+}
+
 async function connectDB(uri) {
   applyDnsServers();
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
-  logger.debug('MongoDB connected');
+  await ensureIndexes();
+  logger.debug('MongoDB connected, indexes ready');
   return mongoose.connection;
 }
 
