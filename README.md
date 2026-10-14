@@ -3,6 +3,7 @@
 The backend for creating events, selling free and paid (Paystack) tickets, managing waitlists, and checking people in with QR codes. Built with Express and MongoDB (Mongoose).
 
 - API base: `/api/v1`. Interactive docs are at **`/api/docs`** and the raw spec is at `/api/docs.json`.
+- Postman: import the two files in [postman/](postman/) and run the folders in order. See [postman/README.md](postman/README.md).
 - Roles: `admin`, `organizer` (creates and runs their own events), `attendee` (registers).
 - Prices are integers in the currency's smallest unit (NGN kobo): `500000` = ₦5,000.
 - The code is written as ES modules (`"type": "module"`), so use `import`/`export` and give relative imports a `.js` extension. Jest runs in ESM mode, which `npm test` turns on with `--experimental-vm-modules`. Test files import `jest` from `@jest/globals`.

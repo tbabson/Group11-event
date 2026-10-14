@@ -385,7 +385,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 200) {",
-                  "  pm.collectionVariables.set('adminToken', pm.response.json().payload.accessToken);",
+                  "  pm.collectionVariables.set('adminToken', pm.response.json().data.accessToken);",
                   "}",
                   "pm.test('admin logged in (set adminEmail/adminPassword in the environment)', () => pm.expect(pm.response.code).to.eql(200));"
                 ]
@@ -686,7 +686,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
-                  "pm.collectionVariables.set('freeTicketId', pm.response.json().payload._id);"
+                  "pm.collectionVariables.set('freeTicketId', pm.response.json().data._id);"
                 ]
               }
             }
@@ -740,7 +740,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
-                  "pm.collectionVariables.set('vipTicketId', pm.response.json().payload._id);"
+                  "pm.collectionVariables.set('vipTicketId', pm.response.json().data._id);"
                 ]
               }
             }
@@ -887,7 +887,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test('published', () => pm.expect(pm.response.json().payload.status).to.eql('published'));"
+                  "pm.test('published', () => pm.expect(pm.response.json().data.status).to.eql('published'));"
                 ]
               }
             }
@@ -1653,7 +1653,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test('checked-in', () => pm.expect(pm.response.json().payload.status).to.eql('checked-in'));"
+                  "pm.test('checked-in', () => pm.expect(pm.response.json().data.status).to.eql('checked-in'));"
                 ]
               }
             }
@@ -1816,7 +1816,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/events/{{eventId}}/attendees?status=&page=1&limit=20",
+              "raw": "{{baseUrl}}/events/{{eventId}}/attendees?page=1&limit=20",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1828,7 +1828,9 @@
               "query": [
                 {
                   "key": "status",
-                  "value": ""
+                  "value": "",
+                  "disabled": true,
+                  "description": "Optional"
                 },
                 {
                   "key": "page",
@@ -2052,7 +2054,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/users?role=organizer&q=&page=1&limit=20",
+              "raw": "{{baseUrl}}/admin/users?role=organizer&page=1&limit=20",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2067,7 +2069,9 @@
                 },
                 {
                   "key": "q",
-                  "value": ""
+                  "value": "",
+                  "disabled": true,
+                  "description": "Optional"
                 },
                 {
                   "key": "page",
@@ -2108,7 +2112,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/revenue?from=&to=",
+              "raw": "{{baseUrl}}/admin/revenue",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2119,11 +2123,15 @@
               "query": [
                 {
                   "key": "from",
-                  "value": ""
+                  "value": "",
+                  "description": "ISO date, e.g. 2026-01-01",
+                  "disabled": true
                 },
                 {
                   "key": "to",
-                  "value": ""
+                  "value": "",
+                  "description": "ISO date",
+                  "disabled": true
                 }
               ]
             },
@@ -2156,7 +2164,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/payouts?status=&page=1&limit=20",
+              "raw": "{{baseUrl}}/admin/payouts?page=1&limit=20",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2167,7 +2175,9 @@
               "query": [
                 {
                   "key": "status",
-                  "value": ""
+                  "value": "",
+                  "disabled": true,
+                  "description": "Optional"
                 },
                 {
                   "key": "page",
@@ -2302,7 +2312,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test('cancelled', () => pm.expect(pm.response.json().payload.status).to.eql('cancelled'));"
+                  "pm.test('cancelled', () => pm.expect(pm.response.json().data.status).to.eql('cancelled'));"
                 ]
               }
             }
