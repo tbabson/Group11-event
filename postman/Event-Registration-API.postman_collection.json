@@ -186,10 +186,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('organizerToken', data.accessToken);",
-                  "pm.collectionVariables.set('organizerRefreshToken', data.refreshToken);",
-                  "pm.collectionVariables.set('organizerId', data.user._id);"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('organizerToken', payload.accessToken);",
+                  "pm.collectionVariables.set('organizerRefreshToken', payload.refreshToken);",
+                  "pm.collectionVariables.set('organizerId', payload.user._id);"
                 ]
               }
             }
@@ -236,10 +236,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('attendeeToken', data.accessToken);",
-                  "pm.collectionVariables.set('attendeeRefreshToken', data.refreshToken);",
-                  "pm.collectionVariables.set('attendeeId', data.user._id);"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('attendeeToken', payload.accessToken);",
+                  "pm.collectionVariables.set('attendeeRefreshToken', payload.refreshToken);",
+                  "pm.collectionVariables.set('attendeeId', payload.user._id);"
                 ]
               }
             }
@@ -286,10 +286,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('attendee2Token', data.accessToken);",
-                  "pm.collectionVariables.set('attendee2RefreshToken', data.refreshToken);",
-                  "pm.collectionVariables.set('attendee2Id', data.user._id);"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('attendee2Token', payload.accessToken);",
+                  "pm.collectionVariables.set('attendee2RefreshToken', payload.refreshToken);",
+                  "pm.collectionVariables.set('attendee2Id', payload.user._id);"
                 ]
               }
             }
@@ -336,10 +336,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('attendeeToken', data.accessToken);",
-                  "pm.collectionVariables.set('attendeeRefreshToken', data.refreshToken);",
-                  "pm.collectionVariables.set('attendeeId', data.user._id);"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('attendeeToken', payload.accessToken);",
+                  "pm.collectionVariables.set('attendeeRefreshToken', payload.refreshToken);",
+                  "pm.collectionVariables.set('attendeeId', payload.user._id);"
                 ]
               }
             }
@@ -385,7 +385,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 200) {",
-                  "  pm.collectionVariables.set('adminToken', pm.response.json().data.accessToken);",
+                  "  pm.collectionVariables.set('adminToken', pm.response.json().payload.accessToken);",
                   "}",
                   "pm.test('admin logged in (set adminEmail/adminPassword in the environment)', () => pm.expect(pm.response.code).to.eql(200));"
                 ]
@@ -434,10 +434,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('attendeeToken', data.accessToken);",
-                  "pm.collectionVariables.set('attendeeRefreshToken', data.refreshToken);",
-                  "pm.collectionVariables.set('attendeeId', data.user._id);"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('attendeeToken', payload.accessToken);",
+                  "pm.collectionVariables.set('attendeeRefreshToken', payload.refreshToken);",
+                  "pm.collectionVariables.set('attendeeId', payload.user._id);"
                 ]
               }
             }
@@ -631,10 +631,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('eventId', data._id);",
-                  "pm.collectionVariables.set('eventSlug', data.slug);",
-                  "pm.test('starts as draft', () => pm.expect(data.status).to.eql('draft'));"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('eventId', payload._id);",
+                  "pm.collectionVariables.set('eventSlug', payload.slug);",
+                  "pm.test('starts as draft', () => pm.expect(payload.status).to.eql('draft'));"
                 ]
               }
             }
@@ -686,7 +686,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
-                  "pm.collectionVariables.set('freeTicketId', pm.response.json().data._id);"
+                  "pm.collectionVariables.set('freeTicketId', pm.response.json().payload._id);"
                 ]
               }
             }
@@ -740,7 +740,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
-                  "pm.collectionVariables.set('vipTicketId', pm.response.json().data._id);"
+                  "pm.collectionVariables.set('vipTicketId', pm.response.json().payload._id);"
                 ]
               }
             }
@@ -887,7 +887,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test('published', () => pm.expect(pm.response.json().data.status).to.eql('published'));"
+                  "pm.test('published', () => pm.expect(pm.response.json().payload.status).to.eql('published'));"
                 ]
               }
             }
@@ -1007,14 +1007,15 @@
                 }
               ]
             },
-            "description": "Choose a JPEG/PNG/WebP (max 5 MB) for the \"banner\" field. Without a file you get 400; returns 503 when Cloudinary is not configured.",
+            "description": "Enable the \"banner\" field and choose a JPEG/PNG/WebP (max 5 MB). Without a file you get 400; returns 503 when Cloudinary is not configured.",
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "banner",
                   "type": "file",
-                  "src": []
+                  "src": [],
+                  "disabled": true
                 }
               ]
             }
@@ -1125,10 +1126,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201 or 202', () => pm.expect(pm.response.code).to.be.oneOf([201, 202]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('registrationId', data.registrationId);",
-                  "if (data.qrToken) pm.collectionVariables.set('qrToken', data.qrToken);",
-                  "pm.test('confirmed with QR', () => pm.expect(data.status).to.eql('confirmed'));"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('registrationId', payload.registrationId);",
+                  "if (payload.qrToken) pm.collectionVariables.set('qrToken', payload.qrToken);",
+                  "pm.test('confirmed with QR', () => pm.expect(payload.status).to.eql('confirmed'));"
                 ]
               }
             }
@@ -1182,11 +1183,11 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
-                  "const data = pm.response.json().data;",
-                  "pm.collectionVariables.set('paidRegistrationId', data.registrationId);",
-                  "pm.collectionVariables.set('checkoutUrl', data.checkoutUrl);",
-                  "pm.collectionVariables.set('paymentReference', decodeURIComponent(data.checkoutUrl.split('/').pop()));",
-                  "pm.test('pending with checkout url', () => pm.expect(data.status).to.eql('pending'));"
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('paidRegistrationId', payload.registrationId);",
+                  "pm.collectionVariables.set('checkoutUrl', payload.checkoutUrl);",
+                  "pm.collectionVariables.set('paymentReference', decodeURIComponent(payload.checkoutUrl.split('/').pop()));",
+                  "pm.test('pending with checkout url', () => pm.expect(payload.status).to.eql('pending'));"
                 ]
               }
             }
@@ -1652,7 +1653,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test('checked-in', () => pm.expect(pm.response.json().data.status).to.eql('checked-in'));"
+                  "pm.test('checked-in', () => pm.expect(pm.response.json().payload.status).to.eql('checked-in'));"
                 ]
               }
             }
@@ -2301,7 +2302,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test('cancelled', () => pm.expect(pm.response.json().data.status).to.eql('cancelled'));"
+                  "pm.test('cancelled', () => pm.expect(pm.response.json().payload.status).to.eql('cancelled'));"
                 ]
               }
             }
