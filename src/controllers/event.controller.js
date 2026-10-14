@@ -11,6 +11,13 @@ export const search = async (req, res) => {
   send(res, 200, items, { page: paging.page, limit: paging.limit, total });
 };
 
+// GET /me/events: own events in every status (all events for admins), with dashboard counts.
+export const mine = async (req, res) => {
+  const paging = pageParams(req.query);
+  const { items, total, summary } = await events.listForOwner(req.user, { ...paging, bucket: req.query.status, q: req.query.q });
+  send(res, 200, items, { page: paging.page, limit: paging.limit, total, summary });
+};
+
 export const getBySlug = async (req, res) => send(res, 200, await events.getBySlug(req.params.slug, req.user));
 export const create = async (req, res) => send(res, 201, await events.create(req.user.id, req.body));
 export const update = async (req, res) => send(res, 200, await events.update(req.params.id, req.user, req.body));

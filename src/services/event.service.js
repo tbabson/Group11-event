@@ -179,5 +179,55 @@ async function search(query, { limit, skip }, sort) {
   return { items, total };
 }
 
-export { create, update, setPublished, remove, cancelEvent, setBanner, getBySlug, search, getOwned, assertEditable };
-export default { create, update, setPublished, remove, cancelEvent, setBanner, getBySlug, search, getOwned, assertEditable };
+// Dashboard buckets. A published event whose endAt has passed counts as completed even
+// before the hourly closeEvents job flips its status.
+function bucketFilter(bucket, now) {
+  switch (bucket) {
+    case 'live':
+      return { status: 'published', endAt: { $gt: now } };
+    case 'completed':
+      return { $or: [{ status: 'completed' }, { status: 'published', endAt: { $lte: now } }] };
+    case 'draft':
+    case 'cancelled':
+      return { status: bucket };
+    default:
+      return {};
+  }
+}
+
+// GET /me/events: an organizer's own events in every status (admins see all events),
+// plus counts for the dashboard cards.
+async function listForOwner(user, { limit, skip, bucket, q }, now = new Date()) {
+  const scope = user.role === 'admin' ? {} : { organizer: user.id };
+  if (q) scope.title = new RegExp(escapeRegex(q), 'i');
+  const filter = { ...scope, ...bucketFilter(bucket, now) };
+
+  const [items, total, counts] = await Promise.all([
+    Event.find(filter).sort({ startAt: -1 }).skip(skip).limit(limit).populate('organizer', 'name').lean(),
+    Event.countDocuments(filter),
+    Promise.all(['live', 'draft', 'completed', 'cancelled'].map((b) => Event.countDocuments({ ...scope, ...bucketFilter(b, now) }))),
+  ]);
+
+  // Ticket figures for the cards: lowest price, tickets sold, tickets available.
+  const tickets = await TicketType.find({ event: { $in: items.map((e) => e._id) } }, 'event price quantity sold').lean();
+  const byEvent = new Map();
+  for (const t of tickets) {
+    const key = String(t.event);
+    const agg = byEvent.get(key) || { minPrice: null, ticketsSold: 0, ticketsTotal: 0, ticketTypes: 0 };
+    agg.minPrice = agg.minPrice === null ? t.price : Math.min(agg.minPrice, t.price);
+    agg.ticketsSold += t.sold;
+    agg.ticketsTotal += t.quantity;
+    agg.ticketTypes += 1;
+    byEvent.set(key, agg);
+  }
+
+  const [live, draft, completed, cancelled] = counts;
+  return {
+    items: items.map((e) => ({ ...e, ...(byEvent.get(String(e._id)) || { minPrice: null, ticketsSold: 0, ticketsTotal: 0, ticketTypes: 0 }) })),
+    total,
+    summary: { total: await Event.countDocuments(scope), live, draft, completed, cancelled },
+  };
+}
+
+export { create, update, setPublished, remove, cancelEvent, setBanner, getBySlug, search, listForOwner, getOwned, assertEditable };
+export default { create, update, setPublished, remove, cancelEvent, setBanner, getBySlug, search, listForOwner, getOwned, assertEditable };

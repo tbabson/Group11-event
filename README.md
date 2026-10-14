@@ -12,7 +12,7 @@ The backend for creating events, selling free and paid (Paystack) tickets, manag
 ```bash
 cp .env.example .env          # then fill in secrets and MONGODB_URI
 npm install
-npm run dev                   # http://localhost:4000/api/docs
+npm run dev                   # http://localhost:4001/api/docs
 ```
 
 MongoDB **must be a replica set**, because registrations use transactions. The easiest option is a free MongoDB Atlas cluster, which is always a replica set. If you run MongoDB locally instead, start it as a single-node replica set:

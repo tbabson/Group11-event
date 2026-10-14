@@ -40,6 +40,7 @@ router.get('/me', requireAuth, h(authCtl.me));
 router.get('/me/registrations', requireAuth, validate({ query: s.registrations.list }), h(regCtl.mine));
 router.put('/me/payout-account', ...organizer, validate({ body: s.payouts.account }), h(payoutCtl.setAccount));
 router.get('/me/payouts', ...organizer, validate({ query: s.payouts.list }), h(payoutCtl.mine));
+router.get('/me/events', ...organizer, validate({ query: s.myEvents }), h(eventCtl.mine));
 
 // ---- events ----
 router.get('/events', validate({ query: s.events.search }), h(eventCtl.search));
@@ -98,6 +99,7 @@ admin.patch('/events/:id/status', withId, validate({ body: s.events.adminStatus 
 admin.get('/payouts', validate({ query: s.payouts.list }), h(payoutCtl.all));
 admin.post('/payouts/:id/retry', withId, h(payoutCtl.retry));
 admin.get('/revenue', validate({ query: s.admin.revenue }), h(payoutCtl.revenue));
+admin.get('/revenue/events', validate({ query: s.admin.revenueByEvent }), h(payoutCtl.revenueByEvent));
 router.use('/admin', admin);
 
 export default router;

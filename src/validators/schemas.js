@@ -140,7 +140,20 @@ const admin = {
     q: z.string().trim().max(100).optional(),
   }),
   revenue: z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }),
+  revenueByEvent: z.object({
+    ...pagination,
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+    q: z.string().trim().max(100).optional(),
+    sort: z.enum(['gross', 'platformFees', 'payments', 'refunded', 'startAt']).default('gross'),
+  }),
 };
 
-export { objectId, idParams, auth, events, tickets, registrations, payments, payouts, checkIn, admin };
-export default { objectId, idParams, auth, events, tickets, registrations, payments, payouts, checkIn, admin };
+const myEvents = z.object({
+  ...pagination,
+  status: z.enum(['live', 'draft', 'completed', 'cancelled']).optional(),
+  q: z.string().trim().max(100).optional(),
+});
+
+export { objectId, idParams, auth, events, tickets, registrations, payments, payouts, checkIn, admin, myEvents };
+export default { objectId, idParams, auth, events, tickets, registrations, payments, payouts, checkIn, admin, myEvents };

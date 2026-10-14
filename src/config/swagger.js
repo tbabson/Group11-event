@@ -248,6 +248,36 @@ export default {
         responses: { 200: ok(), ...errors },
       },
     },
+    '/me/events': {
+      get: {
+        tags: ['Events'],
+        summary: 'My events in every status (admins: all events) with dashboard counts',
+        description: 'meta.summary = { total, live, draft, completed, cancelled }. "live" = published and not yet ended; "completed" includes published events whose end time has passed.',
+        security: bearer,
+        parameters: [
+          ...listParams,
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['live', 'draft', 'completed', 'cancelled'] } },
+          { name: 'q', in: 'query', schema: str, description: 'Title contains' },
+        ],
+        responses: { 200: ok('Events with minPrice, ticketsSold, ticketsTotal; meta includes summary'), ...errors },
+      },
+    },
+    '/admin/revenue/events': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Revenue per event',
+        description: 'Gross, platform fees, organizer net, refunds, payment count, organizer and payout state for each event with payments.',
+        security: bearer,
+        parameters: [
+          ...listParams,
+          { name: 'sort', in: 'query', schema: { type: 'string', enum: ['gross', 'platformFees', 'payments', 'refunded', 'startAt'], default: 'gross' } },
+          { name: 'q', in: 'query', schema: str, description: 'Event title contains' },
+          { name: 'from', in: 'query', schema: date },
+          { name: 'to', in: 'query', schema: date },
+        ],
+        responses: { 200: ok(), ...errors },
+      },
+    },
     '/admin/users': {
       get: { tags: ['Admin'], summary: 'List users', security: bearer, parameters: [...listParams, { name: 'role', in: 'query', schema: str }, { name: 'q', in: 'query', schema: str }], responses: { 200: ok(), ...errors } },
     },

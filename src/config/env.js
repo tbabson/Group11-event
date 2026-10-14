@@ -7,7 +7,7 @@ if (!isTest) dotenv.config();
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().positive().default(4000),
+  PORT: z.coerce.number().int().positive().default(4001),
   MONGODB_URI: isTest ? z.string().optional() : z.string().min(1),
   // Optional comma-separated DNS servers for Node (fixes "querySrv ETIMEOUT" with mongodb+srv URIs).
   DNS_SERVERS: z
@@ -18,7 +18,7 @@ const schema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  CLIENT_URL: z.string().default('http://localhost:5173'),
+  CLIENT_URL: z.string().default('http://localhost:5002'),
   // 'demo' simulates Paystack locally (no account or network needed); 'live' calls the real API.
   PAYSTACK_MODE: z.enum(['demo', 'live']).default('demo'),
   PAYSTACK_SECRET_KEY: z.string().default(''),

@@ -16,3 +16,10 @@ export const all = list(() => ({}));
 
 export const retry = async (req, res) => send(res, 200, await payouts.retry(req.params.id));
 export const revenue = async (req, res) => send(res, 200, await payouts.platformRevenue(req.query));
+
+export const revenueByEvent = async (req, res) => {
+  const paging = pageParams(req.query);
+  const { from, to, q, sort } = req.query;
+  const { items, total } = await payouts.revenueByEvent({ from, to, q, sort, ...paging });
+  send(res, 200, items, { page: paging.page, limit: paging.limit, total });
+};

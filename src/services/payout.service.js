@@ -9,6 +9,7 @@ import Payment from '../models/Payment.js';
 import Payout from '../models/Payout.js';
 import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
+import { escapeRegex } from '../utils/http.js';
 import { withTransaction } from '../utils/transaction.js';
 import paystack from './paystack.client.js';
 
@@ -218,5 +219,100 @@ async function platformRevenue({ from, to } = {}) {
   };
 }
 
-export { setPayoutAccount, createPayoutsForEvent, processPayout, releaseDuePayouts, handleTransferEvent, retry, eventFinance, listPayouts, platformRevenue, availableAt };
-export default { setPayoutAccount, createPayoutsForEvent, processPayout, releaseDuePayouts, handleTransferEvent, retry, eventFinance, listPayouts, platformRevenue, availableAt };
+const REVENUE_SORTS = {
+  gross: { gross: -1 },
+  platformFees: { platformFees: -1 },
+  payments: { payments: -1 },
+  refunded: { refunded: -1 },
+  startAt: { 'event.startAt': -1 },
+};
+
+// GET /admin/revenue/events: revenue broken down per event (and currency), with the
+// organizer, event status and payout state. Only events with at least one payment appear.
+async function revenueByEvent({ from, to, q, sort = 'gross', limit, skip } = {}) {
+  const match = { status: { $in: ['success', 'refunded'] } };
+  if (from || to) {
+    match.processedAt = {};
+    if (from) match.processedAt.$gte = from;
+    if (to) match.processedAt.$lte = to;
+  }
+  const paid = { $eq: ['$status', 'success'] };
+  const refundedPayment = { $eq: ['$status', 'refunded'] };
+
+  const pipeline = [
+    { $match: match },
+    {
+      $group: {
+        _id: { event: '$event', currency: '$currency' },
+        gross: { $sum: { $cond: [paid, '$amount', 0] } },
+        platformFees: { $sum: { $cond: [paid, '$platformFee', 0] } },
+        organizerNet: { $sum: { $cond: [paid, NET, 0] } },
+        refunded: { $sum: { $cond: [refundedPayment, '$amount', 0] } },
+        payments: { $sum: { $cond: [paid, 1, 0] } },
+        refunds: { $sum: { $cond: [refundedPayment, 1, 0] } },
+        lastPaymentAt: { $max: '$processedAt' },
+      },
+    },
+    { $lookup: { from: 'events', localField: '_id.event', foreignField: '_id', as: 'event' } },
+    { $unwind: '$event' },
+  ];
+  if (q) pipeline.push({ $match: { 'event.title': new RegExp(escapeRegex(q), 'i') } });
+  pipeline.push(
+    { $sort: { ...(REVENUE_SORTS[sort] || REVENUE_SORTS.gross), _id: 1 } },
+    {
+      $facet: {
+        total: [{ $count: 'n' }],
+        items: [
+          { $skip: skip },
+          { $limit: limit },
+          { $lookup: { from: 'users', localField: 'event.organizer', foreignField: '_id', as: 'organizer' } },
+          {
+            $lookup: {
+              from: 'payouts',
+              let: { ev: '$_id.event', cur: '$_id.currency' },
+              pipeline: [
+                { $match: { $expr: { $and: [{ $eq: ['$event', '$$ev'] }, { $eq: ['$currency', '$$cur'] }] } } },
+                { $project: { _id: 1, status: 1, amount: 1, paidAt: 1 } },
+              ],
+              as: 'payout',
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              currency: '$_id.currency',
+              event: {
+                _id: '$event._id',
+                title: '$event.title',
+                slug: '$event.slug',
+                status: '$event.status',
+                startAt: '$event.startAt',
+                endAt: '$event.endAt',
+              },
+              organizer: { $let: { vars: { o: { $first: '$organizer' } }, in: { _id: '$$o._id', name: '$$o.name', email: '$$o.email' } } },
+              gross: 1,
+              platformFees: 1,
+              organizerNet: 1,
+              refunded: 1,
+              payments: 1,
+              refunds: 1,
+              lastPaymentAt: 1,
+              payout: { $ifNull: [{ $first: '$payout' }, null] },
+            },
+          },
+        ],
+      },
+    }
+  );
+
+  const [result] = await Payment.aggregate(pipeline);
+  const items = result.items.map((row) => ({
+    ...row,
+    held: row.payout ? 0 : row.organizerNet,
+    availableAt: availableAt(row.event),
+  }));
+  return { items, total: result.total[0]?.n ?? 0 };
+}
+
+export { setPayoutAccount, createPayoutsForEvent, processPayout, releaseDuePayouts, handleTransferEvent, retry, eventFinance, listPayouts, platformRevenue, revenueByEvent, availableAt };
+export default { setPayoutAccount, createPayoutsForEvent, processPayout, releaseDuePayouts, handleTransferEvent, retry, eventFinance, listPayouts, platformRevenue, revenueByEvent, availableAt };
