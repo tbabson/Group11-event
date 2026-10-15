@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Event Registration & Management API",
-    "description": "Requests for every endpoint of the Group11 event API (`/api/v1`).\n\n1. Import this collection and `local.postman_environment.json`, select the \"Event API – Local\" environment.\n2. Start the API (`npm run dev`).\n3. Run the folders in order (or use the Collection Runner). Tokens and ids are saved automatically.\n\nEvery response uses `{ success, data, meta? }` or `{ success: false, error: { code, message, details } }`. Prices are in kobo.",
+    "description": "Requests for every endpoint of the Group11 event API (`/api/v1`).\n\n1. Import this collection and `local.postman_environment.json`, select the \"Event API – Local\" environment.\n2. Start the API (`npm run dev`).\n3. Run the folders in order (or use the Collection Runner). Tokens and ids are saved automatically.\n\nAttendees can buy up to 10 tickets per order and place more orders later; each ticket has its own QR code.\n\nEvery response uses `{ success, data, meta? }` or `{ success: false, error: { code, message, details } }`. Prices are in kobo.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -132,6 +132,22 @@
     },
     {
       "key": "resetToken",
+      "value": ""
+    },
+    {
+      "key": "paidRegistrationId2",
+      "value": ""
+    },
+    {
+      "key": "orderQrToken2",
+      "value": ""
+    },
+    {
+      "key": "txnRegistrationId",
+      "value": ""
+    },
+    {
+      "key": "txnReference",
       "value": ""
     }
   ],
@@ -1165,17 +1181,18 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticketTypeId\": \"{{freeTicketId}}\"\n}",
+              "raw": "{\n  \"ticketTypeId\": \"{{freeTicketId}}\",\n  \"quantity\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "One free ticket. `quantity` is optional (1–10, default 1)."
           }
         },
         {
-          "name": "Register paid ticket (VIP)",
+          "name": "Buy 3 free tickets (one order)",
           "event": [
             {
               "listen": "test",
@@ -1184,65 +1201,15 @@
                 "exec": [
                   "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
                   "const payload = pm.response.json().data;",
-                  "pm.collectionVariables.set('paidRegistrationId', payload.registrationId);",
-                  "pm.collectionVariables.set('checkoutUrl', payload.checkoutUrl);",
-                  "pm.collectionVariables.set('paymentReference', decodeURIComponent(payload.checkoutUrl.split('/').pop()));",
-                  "pm.test('pending with checkout url', () => pm.expect(payload.status).to.eql('pending'));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/events/{{eventId}}/register",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "events",
-                "{{eventId}}",
-                "register"
-              ]
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{attendee2Token}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "description": "In demo mode the checkoutUrl opens a local demo checkout page with Pay / Decline buttons.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"ticketTypeId\": \"{{vipTicketId}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "Register again (expect 409)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status is 409', () => pm.expect(pm.response.code).to.be.oneOf([409]));",
-                  "pm.test('ALREADY_REGISTERED', () => pm.expect(pm.response.json().error.code).to.eql('ALREADY_REGISTERED'));"
+                  "pm.test('3 tickets in one order', () => {",
+                  "  pm.expect(payload.quantity).to.eql(3);",
+                  "  pm.expect(payload.tickets).to.have.lengthOf(3);",
+                  "});",
+                  "pm.test('every ticket has its own QR code', () => {",
+                  "  const codes = payload.tickets.map((t) => t.qrToken);",
+                  "  pm.expect(new Set(codes).size).to.eql(3);",
+                  "});",
+                  "pm.collectionVariables.set('orderQrToken2', payload.tickets[1].qrToken);"
                 ]
               }
             }
@@ -1276,9 +1243,129 @@
                 }
               ]
             },
+            "description": "The same person can buy again, and several tickets at once. Each ticket gets its own QR code; one email carries all of them.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticketTypeId\": \"{{freeTicketId}}\"\n}",
+              "raw": "{\n  \"ticketTypeId\": \"{{freeTicketId}}\",\n  \"quantity\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Buy 2 VIP tickets (paid, one checkout)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('paidRegistrationId', payload.registrationIds[0]);",
+                  "pm.collectionVariables.set('paidRegistrationId2', payload.registrationIds[1]);",
+                  "pm.collectionVariables.set('checkoutUrl', payload.checkoutUrl);",
+                  "pm.collectionVariables.set('paymentReference', decodeURIComponent(payload.checkoutUrl.split('/').pop()));",
+                  "pm.test('2 pending tickets with one checkout url', () => {",
+                  "  pm.expect(payload.status).to.eql('pending');",
+                  "  pm.expect(payload.quantity).to.eql(2);",
+                  "  pm.expect(payload.checkoutUrl).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "register"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendee2Token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Both tickets are held for 15 minutes and paid in ONE checkout. In demo mode the checkoutUrl opens a local demo page with Pay / Decline.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketTypeId\": \"{{vipTicketId}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Order of 11 tickets (expect 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test('quantity is the field at fault', () => pm.expect(pm.response.json().error.details[0].field).to.eql('quantity'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "register"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendeeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "At most 10 tickets per order. Asking for more than are left returns 409 NOT_ENOUGH_TICKETS and takes none.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketTypeId\": \"{{freeTicketId}}\",\n  \"quantity\": 11\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1526,6 +1613,65 @@
           }
         },
         {
+          "name": "Verify payment (POST /payments/verify)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const payload = pm.response.json().data;",
+                  "pm.test('both tickets confirmed', () => {",
+                  "  pm.expect(payload.registrationStatus).to.eql('confirmed');",
+                  "  pm.expect(payload.quantity).to.eql(2);",
+                  "  pm.expect(payload.confirmedTickets).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "verify"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendee2Token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "What the frontend callback page calls when the buyer returns from Paystack: asks Paystack for the real result and applies it like the webhook. Safe to repeat.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{paymentReference}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Webhook (signed, duplicate)",
           "event": [
             {
@@ -1575,7 +1721,67 @@
             "description": "Sends a signed charge.success for the same reference. Because the demo payment already processed it, the API answers { duplicate: true }. paystackSecret must equal the API's PAYSTACK_SECRET_KEY (demo default: sk_demo_local_secret).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"{{paymentReference}}\",\n    \"amount\": 500000,\n    \"currency\": \"NGN\"\n  }\n}",
+              "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"{{paymentReference}}\",\n    \"amount\": 1000000,\n    \"currency\": \"NGN\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Webhook on /transactions/webhook/paystack (duplicate)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Paystack signs the raw body with HMAC-SHA512 using the secret key.",
+                  "const body = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const signature = CryptoJS.HmacSHA512(body, pm.variables.get('paystackSecret')).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'x-paystack-signature', value: signature });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('already processed', () => pm.expect(pm.response.json().data.duplicate).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/webhook/paystack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "webhook",
+                "paystack"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Same handler as /payments/webhook (RepairHub-style path). Point Paystack at either one.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"{{paymentReference}}\",\n    \"amount\": 1000000,\n    \"currency\": \"NGN\"\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1636,6 +1842,350 @@
                 }
               }
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4b. Transactions (RepairHub layout)",
+      "description": "Pay / verify through /transactions/*, and read the money ledger (every payment, platform fee, refund and payout).",
+      "item": [
+        {
+          "name": "Buy 2 VIP tickets, pay later",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "pm.collectionVariables.set('txnRegistrationId', pm.response.json().data.registrationIds[1]);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "register"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendeeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticketTypeId\": \"{{vipTicketId}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pay (POST /transactions/pay)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "const payload = pm.response.json().data;",
+                  "pm.collectionVariables.set('txnReference', payload.reference);",
+                  "pm.test('has a checkout url', () => pm.expect(payload.checkoutUrl).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "pay"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendeeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Start or resume checkout from any ticket of a pending order. Returns the one checkout for the whole order.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{txnRegistrationId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Demo: pay the order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/demo/checkout/{{txnReference}}/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "demo",
+                "checkout",
+                "{{txnReference}}",
+                "complete"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"outcome\": \"success\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Verify (GET /transactions/verify/:reference)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('order confirmed', () => pm.expect(pm.response.json().data.confirmedTickets).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/verify/{{txnReference}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "verify",
+                "{{txnReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendeeToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "My transactions (attendee)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('a successful ticket payment of ₦10,000', () => {",
+                  "  const rows = pm.response.json().data;",
+                  "  pm.expect(rows.some((t) => t.status === 'success' && t.amount === 1000000)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/me?type=ticket_payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "ticket_payment"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attendeeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Attendees see their ticket payments and refunds. Filters: type, status, page, limit."
+          }
+        },
+        {
+          "name": "My transactions (organizer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('commission rows', () => pm.expect(pm.response.json().data.length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/me?type=commission",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "commission"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{organizerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Organizers see the platform commission taken on their sales, and their payouts."
+          }
+        },
+        {
+          "name": "Admin ledger (GET /admin/transactions)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/transactions?event={{eventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "event",
+                  "value": "{{eventId}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Full ledger. Filters: type, status, event, user, page, limit."
           }
         }
       ]
@@ -1744,6 +2294,61 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"qrToken\": \"{{qrToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Check in another ticket of the same order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('checked-in', () => pm.expect(pm.response.json().data.status).to.eql('checked-in'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/check-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "check-in"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{organizerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Each ticket of an order has its own QR code and checks in independently.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qrToken\": \"{{orderQrToken2}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2304,7 +2909,7 @@
       "description": "Run last. Cancels the paid ticket (refunded: event policy is \"full\") and cancels the event.",
       "item": [
         {
-          "name": "Cancel paid registration",
+          "name": "Cancel one VIP ticket (refunds only its share)",
           "event": [
             {
               "listen": "test",
@@ -2336,6 +2941,55 @@
                 {
                   "key": "token",
                   "value": "{{attendee2Token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "The event refund policy is \"full\", so this ticket is refunded ₦5,000 (Paystack partial refund). The other VIP ticket of the order stays valid."
+          }
+        },
+        {
+          "name": "Refund recorded for one ticket only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('a ₦5,000 refund (one ticket of the ₦10,000 order)', () => {",
+                  "  const rows = pm.response.json().data;",
+                  "  pm.expect(rows.some((t) => t.amount === 500000 && t.status === 'success')).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/transactions?type=refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "refund"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
                   "type": "string"
                 }
               ]
