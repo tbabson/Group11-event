@@ -15,9 +15,27 @@ function applyDnsServers() {
   logger.debug({ servers: env.DNS_SERVERS }, 'Using custom DNS servers');
 }
 
+// One-off schema changes for databases created by older versions of the app.
+async function migrate(connection = mongoose.connection) {
+  // A person may now hold several tickets for an event, so the old UNIQUE {event, user}
+  // index on registrations must go (it would reject the second ticket of an order).
+  const registrations = connection.collection('registrations');
+  try {
+    const old = (await registrations.indexes()).find((i) => i.name === 'event_1_user_1' && i.unique);
+    if (old) {
+      await registrations.dropIndex('event_1_user_1');
+      await registrations.createIndex({ event: 1, user: 1 });
+      logger.info('Migrated: registrations event+user index is no longer unique (multiple tickets per person)');
+    }
+  } catch (err) {
+    if (err?.codeName !== 'NamespaceNotFound') throw err; // brand-new database: nothing to migrate
+  }
+}
+
 async function connectDB(uri) {
   applyDnsServers();
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
+  await migrate();
   logger.debug('MongoDB connected');
   return mongoose.connection;
 }
@@ -26,5 +44,5 @@ async function disconnectDB() {
   await mongoose.disconnect();
 }
 
-export { connectDB, disconnectDB };
-export default { connectDB, disconnectDB };
+export { connectDB, disconnectDB, migrate };
+export default { connectDB, disconnectDB, migrate };

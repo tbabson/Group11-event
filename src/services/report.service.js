@@ -4,6 +4,7 @@ import TicketType from '../models/TicketType.js';
 import { csvRow } from '../utils/csv.js';
 import { getOwned } from './event.service.js';
 import { eventFinance } from './payout.service.js';
+import { KEPT } from './money.js';
 
 async function attendees(eventId, user, { limit, skip, status }) {
   const event = await getOwned(eventId, user);
@@ -27,7 +28,7 @@ async function stats(eventId, user) {
     Registration.aggregate([{ $match: { event: event._id } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
     Payment.aggregate([
       { $match: { event: event._id, status: 'success' } },
-      { $group: { _id: '$currency', amount: { $sum: '$amount' } } },
+      { $group: { _id: '$currency', amount: { $sum: KEPT } } }, // after partial refunds
     ]),
     TicketType.find({ event: event._id }, 'name kind price quantity sold'),
   ]);

@@ -14,27 +14,28 @@ const expireHoldOf = (registrationId) =>
   Registration.updateOne({ _id: registrationId }, { holdExpiresAt: new Date(Date.now() - 1000) }).then(() => expireHolds());
 const charge = (p) => ({ event: 'charge.success', data: { reference: p.reference, amount: p.amount, currency: p.currency } });
 
-describe('stale checkout after re-registration', () => {
-  it('does not reuse or honour a checkout made for a different ticket type', async () => {
+describe('stale checkout after buying again', () => {
+  it('a late payment confirms only the ticket it was made for, never a newer order', async () => {
     const { refund } = mockPaystack();
     const { event, ticket: vip } = await setupEvent({ ticket: paidTicket({ price: 5000000 }) });
     const regular = await createTicket(event, { name: 'Regular', kind: 'regular', price: 1000000 });
     const att = await createUser('attendee');
 
     const first = await register(att, event, vip).expect(201);
-    const regId = first.body.data.registrationId;
-    const vipPayment = await Payment.findOne({ registration: regId });
-    await expireHoldOf(regId);
+    const vipRegId = first.body.data.registrationId;
+    const vipPayment = await Payment.findOne({ registration: vipRegId });
+    await expireHoldOf(vipRegId);
 
-    await register(att, event, regular).expect(201);
-    const init = await api().post('/api/v1/payments/initialize').set(att.auth).send({ registrationId: regId });
-    expect(init.body.data.reference).not.toBe(vipPayment.reference);
+    const second = await register(att, event, regular).expect(201);
+    const regularRegId = second.body.data.registrationId;
+    expect(regularRegId).not.toBe(vipRegId);
 
-    // Paying the abandoned VIP link must not confirm the Regular registration.
+    // Paying the abandoned VIP link reclaims the VIP seat for that order only.
     const res = await sendWebhook(charge(vipPayment));
-    expect(res.body.data).toEqual({ refunded: true });
-    expect(refund).toHaveBeenCalledWith(vipPayment.reference);
-    expect((await Registration.findById(regId)).status).toBe('pending');
+    expect(res.body.data).toMatchObject({ confirmed: true, reclaimed: true });
+    expect(refund).not.toHaveBeenCalled();
+    expect((await Registration.findById(vipRegId)).status).toBe('confirmed');
+    expect((await Registration.findById(regularRegId)).status).toBe('pending');
   });
 });
 

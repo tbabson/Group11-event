@@ -117,7 +117,11 @@ describe('event management', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.bannerUrl).toBe(`https://res.cloudinary.com/demo-cloud/group11/${event._id}.png`);
       expect(config).toHaveBeenCalledWith(expect.objectContaining({ cloud_name: 'demo-cloud', api_key: 'key', api_secret: 'secret' }));
-      expect(stream.mock.calls[0][0]).toMatchObject({ folder: 'group11', public_id: String(event._id) });
+      expect(stream.mock.calls[0][0]).toMatchObject({
+        folder: 'group11',
+        public_id: String(event._id),
+        transformation: [{ width: 1080, height: 608, crop: 'fill', gravity: 'auto', quality: 'auto' }],
+      });
     } finally {
       Object.assign(env, { CLOUDINARY_CLOUD_NAME: undefined, CLOUDINARY_API_KEY: undefined, CLOUDINARY_API_SECRET: undefined, CLOUDINARY_FOLDER: 'event-banners' });
       upload._reset();

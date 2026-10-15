@@ -8,6 +8,7 @@ import '../src/models/TicketType.js';
 import '../src/models/Registration.js';
 import '../src/models/Payment.js';
 import '../src/models/Payout.js';
+import '../src/models/Transaction.js';
 
 beforeAll(async () => {
   // Each test file gets its own database on the shared replica set.

@@ -27,21 +27,38 @@ async function safely(fn, context) {
   }
 }
 
-const ticket = (registrationId) =>
+// One email for the tickets of an order, with a QR code per ticket. Each code works once.
+const tickets = (registrationIds) =>
   safely(async () => {
-    const reg = await loadRegistration(registrationId);
-    if (!reg || !reg.qrToken) return;
-    const png = await qrPng(reg.qrToken);
+    const regs = (await Promise.all(registrationIds.map(loadRegistration))).filter((r) => r?.qrToken);
+    if (!regs.length) return;
+    const [first] = regs;
+    const many = regs.length > 1;
+    const pngs = await Promise.all(regs.map((r) => qrPng(r.qrToken)));
+    const codes = regs
+      .map(
+        (r, i) =>
+          `<p><strong>Ticket ${i + 1} of ${regs.length}</strong> · ${escapeHtml(r.ticketType.name)}<br>` +
+          `<img src="cid:ticket-qr-${i + 1}" alt="Ticket ${i + 1} QR code"></p>`
+      )
+      .join('');
     email.enqueue({
-      to: reg.user.email,
-      subject: `Your ticket: ${reg.event.title}`,
-      html: `<p>Hi ${escapeHtml(reg.user.name)},</p>
-<p>You're confirmed for <strong>${escapeHtml(reg.event.title)}</strong> (${escapeHtml(reg.ticketType.name)}).</p>
-<p>When: ${when(reg.event)}<br>Where: ${escapeHtml(where(reg.event))}</p>
-<p>Show this QR code at the entrance (it is also attached as ticket.png):</p><img src="cid:ticket-qr" alt="Ticket QR code">`,
-      attachments: [{ filename: 'ticket.png', content: png, cid: 'ticket-qr' }],
+      to: first.user.email,
+      subject: many ? `Your ${regs.length} tickets: ${first.event.title}` : `Your ticket: ${first.event.title}`,
+      html: `<p>Hi ${escapeHtml(first.user.name)},</p>
+<p>You're confirmed for <strong>${escapeHtml(first.event.title)}</strong>${many ? ` with ${regs.length} tickets` : ''}.</p>
+<p>When: ${when(first.event)}<br>Where: ${escapeHtml(where(first.event))}</p>
+<p>${many ? 'Each guest shows their own QR code at the entrance; each code works once.' : 'Show this QR code at the entrance.'} The codes are also attached as images.</p>
+${codes}`,
+      attachments: pngs.map((content, i) => ({
+        filename: many ? `ticket-${i + 1}.png` : 'ticket.png',
+        content,
+        cid: `ticket-qr-${i + 1}`,
+      })),
     });
-  }, { registrationId, kind: 'ticket' });
+  }, { registrationIds: registrationIds.map(String), kind: 'tickets' });
+
+const ticket = (registrationId) => tickets([registrationId]);
 
 const waitlisted = (registrationId) =>
   safely(async () => {
@@ -109,5 +126,5 @@ const passwordReset = (user, token) =>
     });
   }, { userId: user._id, kind: 'passwordReset' });
 
-export { ticket, waitlisted, paymentRequired, cancelled, reminder, passwordReset, escapeHtml };
-export default { ticket, waitlisted, paymentRequired, cancelled, reminder, passwordReset, escapeHtml };
+export { ticket, tickets, waitlisted, paymentRequired, cancelled, reminder, passwordReset, escapeHtml };
+export default { ticket, tickets, waitlisted, paymentRequired, cancelled, reminder, passwordReset, escapeHtml };

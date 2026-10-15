@@ -29,7 +29,15 @@ function uploadBanner(buffer, publicId) {
   return new Promise((resolve, reject) => {
     cloudinary.uploader
       .upload_stream(
-        { folder: env.CLOUDINARY_FOLDER, public_id: publicId, overwrite: true, resource_type: 'image' },
+        {
+          folder: env.CLOUDINARY_FOLDER,
+          public_id: publicId,
+          overwrite: true,
+          resource_type: 'image',
+          // Store every banner at exactly BANNER_WIDTH × BANNER_HEIGHT (1080 × 608, 16:9): crop to
+          // fill around the most important part of the photo, and compress sensibly.
+          transformation: [{ width: env.BANNER_WIDTH, height: env.BANNER_HEIGHT, crop: 'fill', gravity: 'auto', quality: 'auto' }],
+        },
         (err, result) => (err ? reject(new AppError(502, 'UPLOAD_FAILED', 'Banner upload failed')) : resolve(result.secure_url))
       )
       .end(buffer);

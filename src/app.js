@@ -41,9 +41,12 @@ function createApp() {
     })
   );
 
-  // The webhook signature is computed over the exact bytes, so this route gets the raw body
-  // and must be registered before the JSON parser.
-  app.post('/api/v1/payments/webhook', express.raw({ type: '*/*', limit: '1mb' }), asyncHandler(regCtl.webhook));
+  // The webhook signature is computed over the exact bytes, so these routes get the raw body
+  // and must be registered before the JSON parser. Both paths run the same handler; point
+  // Paystack's dashboard at either one.
+  const webhook = [express.raw({ type: '*/*', limit: '1mb' }), asyncHandler(regCtl.webhook)];
+  app.post('/api/v1/payments/webhook', ...webhook);
+  app.post('/api/v1/transactions/webhook/paystack', ...webhook);
 
   app.use(express.json({ limit: '100kb' }));
   app.use(mongoSanitize());

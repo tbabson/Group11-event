@@ -11,6 +11,7 @@ import * as eventCtl from '../controllers/event.controller.js';
 import * as regCtl from '../controllers/registration.controller.js';
 import * as reportCtl from '../controllers/report.controller.js';
 import * as payoutCtl from '../controllers/payout.controller.js';
+import * as txnCtl from '../controllers/transaction.controller.js';
 import paystackDemo from './paystackDemo.js';
 import paystack from '../services/paystack.client.js';
 import AppError from '../utils/AppError.js';
@@ -77,6 +78,18 @@ router.post(
   validate({ body: s.payments.initialize }),
   h(regCtl.initializePayment)
 );
+router.post('/payments/verify', requireAuth, validate({ body: s.payments.verify }), h(regCtl.verifyPayment));
+
+// ---- transactions (RepairHub layout; the webhook is mounted in app.js for its raw body) ----
+router.post(
+  '/transactions/pay',
+  requireAuth,
+  requireRole('attendee'),
+  validate({ body: s.payments.initialize }),
+  h(txnCtl.pay)
+);
+router.get('/transactions/verify/:reference', requireAuth, validate({ params: s.transactions.verifyParams }), h(txnCtl.verify));
+router.get('/transactions/me', requireAuth, validate({ query: s.transactions.list }), h(txnCtl.mine));
 
 // Demo checkout page: only reachable when PAYSTACK_MODE=demo.
 router.use(
@@ -100,6 +113,7 @@ admin.get('/payouts', validate({ query: s.payouts.list }), h(payoutCtl.all));
 admin.post('/payouts/:id/retry', withId, h(payoutCtl.retry));
 admin.get('/revenue', validate({ query: s.admin.revenue }), h(payoutCtl.revenue));
 admin.get('/revenue/events', validate({ query: s.admin.revenueByEvent }), h(payoutCtl.revenueByEvent));
+admin.get('/transactions', validate({ query: s.transactions.adminList }), h(txnCtl.all));
 router.use('/admin', admin);
 
 export default router;

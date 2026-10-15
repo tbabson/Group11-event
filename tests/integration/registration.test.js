@@ -23,7 +23,7 @@ describe('registration', () => {
     await email.flush();
     const mail = email.testOutbox.find((m) => m.subject.startsWith('Your ticket'));
     expect(mail.to).toBe(att.user.email);
-    expect(mail.attachments[0].cid).toBe('ticket-qr');
+    expect(mail.attachments[0].cid).toBe('ticket-qr-1');
   });
 
   it('holds a paid seat for 15 minutes and returns the checkout URL', async () => {
@@ -54,14 +54,15 @@ describe('registration', () => {
     expect((await Registration.findOne({ user: att.user._id })).status).toBe('cancelled');
   });
 
-  it('rejects a second registration for the same event with 409', async () => {
+  it('lets the same person buy again for the same event (a separate ticket)', async () => {
     const { event, ticket } = await setupEvent();
     const att = await createUser('attendee');
-    await register(att, event, ticket).expect(201);
+    const first = await register(att, event, ticket).expect(201);
     const again = await register(att, event, ticket);
-    expect(again.status).toBe(409);
-    expect(again.body.error.code).toBe('ALREADY_REGISTERED');
-    expect((await TicketType.findById(ticket._id)).sold).toBe(1);
+    expect(again.status).toBe(201);
+    expect(again.body.data.registrationId).not.toBe(first.body.data.registrationId);
+    expect(again.body.data.qrToken).not.toBe(first.body.data.qrToken);
+    expect((await TicketType.findById(ticket._id)).sold).toBe(2);
   });
 
   it('refuses unpublished events, closed sales and organizers', async () => {
@@ -148,7 +149,7 @@ describe('registration', () => {
     await api().delete(`/api/v1/registrations/${first.body.data.registrationId}`).set(att.auth).expect(200);
     const again = await register(att, event, ticket);
     expect(again.status).toBe(201);
-    expect(again.body.data.registrationId).toBe(first.body.data.registrationId);
+    expect(again.body.data.registrationId).not.toBe(first.body.data.registrationId); // a new ticket
     expect((await TicketType.findById(ticket._id)).sold).toBe(1);
   });
 

@@ -106,7 +106,12 @@ const tickets = {
 
 // ---- registrations, payments, check-in ----
 const registrations = {
-  register: z.object({ ticketTypeId: objectId }).strict(),
+  register: z
+    .object({
+      ticketTypeId: objectId,
+      quantity: z.coerce.number().int().min(1).max(100).default(1), // per-order cap enforced in the service
+    })
+    .strict(),
   qr: z.object({
     size: z.coerce.number().int().min(150).max(1000).default(400),
     inline: boolString,
@@ -117,7 +122,24 @@ const registrations = {
   }),
 };
 
-const payments = { initialize: z.object({ registrationId: objectId }).strict() };
+const reference = z.string().trim().min(5).max(100);
+
+const payments = {
+  initialize: z.object({ registrationId: objectId }).strict(),
+  verify: z.object({ reference }).strict(),
+};
+
+// RepairHub-style /transactions routes.
+const transactionFilters = {
+  ...pagination,
+  type: z.enum(['ticket_payment', 'commission', 'refund', 'payout']).optional(),
+  status: z.enum(['pending', 'success', 'failed', 'reversed']).optional(),
+};
+const transactions = {
+  verifyParams: z.object({ reference }),
+  list: z.object(transactionFilters),
+  adminList: z.object({ ...transactionFilters, event: objectId.optional(), user: objectId.optional() }),
+};
 const checkIn = z.object({ qrToken: z.string().trim().min(10).max(200) }).strict();
 
 const PAYOUT_STATUSES = ['pending', 'awaiting_account', 'processing', 'paid', 'failed'];
@@ -155,5 +177,5 @@ const myEvents = z.object({
   q: z.string().trim().max(100).optional(),
 });
 
-export { objectId, idParams, auth, events, tickets, registrations, payments, payouts, checkIn, admin, myEvents };
-export default { objectId, idParams, auth, events, tickets, registrations, payments, payouts, checkIn, admin, myEvents };
+export { objectId, idParams, auth, events, tickets, registrations, payments, payouts, transactions, checkIn, admin, myEvents };
+export default { objectId, idParams, auth, events, tickets, registrations, payments, payouts, transactions, checkIn, admin, myEvents };

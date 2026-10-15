@@ -209,6 +209,62 @@ export default {
         responses: { 200: ok('Webhook result, e.g. { outcome, confirmed: true }'), 400: errors[400], 404: errors[404] },
       },
     },
+    '/transactions/pay': {
+      post: {
+        tags: ['Transactions'],
+        summary: 'Start or resume checkout for a pending (paid) registration',
+        security: bearer,
+        requestBody: json(obj({ registrationId: str }, ['registrationId'])),
+        responses: { 201: ok('{ registrationId, checkoutUrl, reference, holdExpiresAt }'), ...errors },
+      },
+    },
+    '/transactions/verify/{reference}': {
+      get: {
+        tags: ['Transactions'],
+        summary: 'Confirm a payment with Paystack (called by the payment callback page)',
+        description: 'Applies the result exactly like the webhook would; safe to call repeatedly.',
+        security: bearer,
+        parameters: [{ name: 'reference', in: 'path', required: true, schema: str }],
+        responses: { 200: ok('{ paymentStatus, registrationStatus, event }'), ...errors, 502: ok('Paystack unavailable') },
+      },
+    },
+    '/transactions/webhook/paystack': {
+      post: {
+        tags: ['Transactions'],
+        summary: 'Paystack webhook (same handler as /payments/webhook)',
+        parameters: [{ name: 'x-paystack-signature', in: 'header', required: true, schema: str }],
+        responses: { 200: ok('Processed or duplicate'), 401: errors[401] },
+      },
+    },
+    '/transactions/me': {
+      get: {
+        tags: ['Transactions'],
+        summary: 'My money history',
+        description: 'Attendees: ticket payments and refunds. Organizers: platform commissions and payouts on their events.',
+        security: bearer,
+        parameters: [
+          ...listParams,
+          { name: 'type', in: 'query', schema: { type: 'string', enum: ['ticket_payment', 'commission', 'refund', 'payout'] } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'success', 'failed', 'reversed'] } },
+        ],
+        responses: { 200: ok(), ...errors },
+      },
+    },
+    '/admin/transactions': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Full money ledger',
+        security: bearer,
+        parameters: [
+          ...listParams,
+          { name: 'type', in: 'query', schema: { type: 'string', enum: ['ticket_payment', 'commission', 'refund', 'payout'] } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'success', 'failed', 'reversed'] } },
+          { name: 'event', in: 'query', schema: str },
+          { name: 'user', in: 'query', schema: str },
+        ],
+        responses: { 200: ok(), ...errors },
+      },
+    },
     '/events/{id}/check-in': {
       post: { tags: ['Check-in'], summary: 'Scan a QR token', security: bearer, parameters: [id], requestBody: json(obj({ qrToken: str }, ['qrToken'])), responses: { 200: ok(), ...errors } },
     },

@@ -39,10 +39,23 @@ async function initializeTransaction({ email, amount, currency, reference, callb
   }
 }
 
-async function refundTransaction(reference) {
-  if (isDemo()) return { transaction: reference, status: 'processed', demo: true };
+// Asks Paystack for the current state of a transaction. Returns { status, amount, currency },
+// where status is Paystack's value: success | failed | abandoned | ongoing | pending | reversed.
+async function verifyTransaction(reference) {
   try {
-    const { data } = await http.post('/refund', { transaction: reference });
+    const { data } = await http.get(`/transaction/verify/${encodeURIComponent(reference)}`);
+    if (!data?.status) throw new Error(data?.message || 'verify failed');
+    return { status: data.data.status, amount: data.data.amount, currency: data.data.currency };
+  } catch (err) {
+    throw providerError(err);
+  }
+}
+
+// Refunds a charge. Pass `amount` (smallest unit) to refund part of it, e.g. one ticket of an order.
+async function refundTransaction(reference, amount) {
+  if (isDemo()) return { transaction: reference, amount, status: 'processed', demo: true };
+  try {
+    const { data } = await http.post('/refund', amount ? { transaction: reference, amount } : { transaction: reference });
     if (!data?.status) throw new Error(data?.message || 'refund failed');
     return data.data;
   } catch (err) {
@@ -92,5 +105,5 @@ function verifySignature(rawBody, signature) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export { initializeTransaction, refundTransaction, createTransferRecipient, initiateTransfer, verifySignature, sign, isDemo, http };
-export default { initializeTransaction, refundTransaction, createTransferRecipient, initiateTransfer, verifySignature, sign, isDemo, http };
+export { initializeTransaction, verifyTransaction, refundTransaction, demoCheckoutUrl, createTransferRecipient, initiateTransfer, verifySignature, sign, isDemo, http };
+export default { initializeTransaction, verifyTransaction, refundTransaction, demoCheckoutUrl, createTransferRecipient, initiateTransfer, verifySignature, sign, isDemo, http };

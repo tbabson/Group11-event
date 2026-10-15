@@ -10,11 +10,12 @@ import Payout from '../models/Payout.js';
 import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
 import { escapeRegex } from '../utils/http.js';
+import { KEPT, FEE, NET, REFUNDED, KEPT_TICKETS, REFUNDED_TICKETS } from './money.js';
 import { withTransaction } from '../utils/transaction.js';
 import paystack from './paystack.client.js';
+import ledger from './ledger.service.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const NET = { $ifNull: ['$organizerNet', '$amount'] };
 
 const availableAt = (event) => new Date(new Date(event.endAt).getTime() + env.PAYOUT_HOLD_DAYS * DAY_MS);
 
@@ -53,7 +54,7 @@ async function createPayoutsForEvent(event) {
         );
         const [totals] = await Payment.aggregate([
           { $match: { payout: p._id } },
-          { $group: { _id: null, gross: { $sum: '$amount' }, fee: { $sum: '$platformFee' }, net: { $sum: NET }, count: { $sum: 1 } } },
+          { $group: { _id: null, gross: { $sum: KEPT }, fee: { $sum: FEE }, net: { $sum: NET }, count: { $sum: 1 } } },
         ]).session(session);
         p.set({ grossAmount: totals.gross, platformFee: totals.fee, amount: totals.net, paymentCount: totals.count });
         await p.save({ session });
@@ -66,6 +67,21 @@ async function createPayoutsForEvent(event) {
     }
   }
   return created;
+}
+
+// One ledger row per transfer attempt (each attempt has its own Paystack reference).
+function recordPayout(payout, status, note) {
+  return ledger.record({
+    user: payout.organizer,
+    event: payout.event,
+    payout: payout._id,
+    type: 'payout',
+    amount: payout.amount,
+    currency: payout.currency,
+    status,
+    reference: payout.reference,
+    note,
+  });
 }
 
 // Sends (or retries) the transfer for a payout.
@@ -102,10 +118,12 @@ async function processPayout(payoutId) {
     payout.transferCode = transfer.transferCode;
     payout.demo = paystack.isDemo();
     if (transfer.status === 'success') payout.set({ status: 'paid', paidAt: new Date(), failureReason: undefined });
+    await recordPayout(payout, payout.status === 'paid' ? 'success' : 'pending');
     return await payout.save();
   } catch (err) {
     payout.set({ status: 'failed', failureReason: err.message });
     logger.error({ err, payoutId: payout._id }, 'Payout transfer failed');
+    await recordPayout(payout, 'failed', err.message);
     return payout.save();
   }
 }
@@ -131,6 +149,7 @@ async function handleTransferEvent(type, reference) {
       ? { status: 'paid', paidAt: new Date() }
       : { status: 'failed', failureReason: type === 'transfer.reversed' ? 'Transfer reversed' : 'Transfer failed' };
   const payout = await Payout.findOneAndUpdate({ reference, status: 'processing' }, set, { new: true });
+  if (payout) await ledger.setStatus(reference, payout.status === 'paid' ? 'success' : 'failed', set.failureReason);
   return payout ? { payout: payout.status } : { ignored: true };
 }
 
@@ -153,22 +172,17 @@ async function eventFinance(event) {
       { $match: { event: event._id, status: { $in: ['success', 'refunded'] } } },
       {
         $group: {
-          _id: { currency: '$currency', status: '$status' },
-          gross: { $sum: '$amount' },
-          fee: { $sum: '$platformFee' },
-          net: { $sum: NET },
+          _id: '$currency',
+          gross: { $sum: KEPT },
+          platformFee: { $sum: FEE },
+          organizerNet: { $sum: NET },
+          refunded: { $sum: REFUNDED },
         },
       },
     ]),
     Payout.find({ event: event._id }, 'currency amount status paidAt'),
   ]);
-  const byCurrency = {};
-  for (const r of rows) {
-    const c = (byCurrency[r._id.currency] ??= { currency: r._id.currency, gross: 0, platformFee: 0, organizerNet: 0, refunded: 0 });
-    if (r._id.status === 'refunded') c.refunded += r.gross;
-    else Object.assign(c, { gross: r.gross, platformFee: r.fee, organizerNet: r.net });
-  }
-  return Object.values(byCurrency).map((c) => {
+  return rows.map(({ _id, ...c }) => ({ currency: _id, ...c })).map((c) => {
     const payout = payouts.find((p) => p.currency === c.currency);
     return {
       ...c,
@@ -201,8 +215,8 @@ async function platformRevenue({ from, to } = {}) {
       {
         $group: {
           _id: '$currency',
-          gross: { $sum: '$amount' },
-          platformFees: { $sum: '$platformFee' },
+          gross: { $sum: KEPT },
+          platformFees: { $sum: FEE },
           organizerNet: { $sum: NET },
           payments: { $sum: 1 },
         },
@@ -237,19 +251,19 @@ async function revenueByEvent({ from, to, q, sort = 'gross', limit, skip } = {})
     if (to) match.processedAt.$lte = to;
   }
   const paid = { $eq: ['$status', 'success'] };
-  const refundedPayment = { $eq: ['$status', 'refunded'] };
 
   const pipeline = [
     { $match: match },
     {
       $group: {
         _id: { event: '$event', currency: '$currency' },
-        gross: { $sum: { $cond: [paid, '$amount', 0] } },
-        platformFees: { $sum: { $cond: [paid, '$platformFee', 0] } },
-        organizerNet: { $sum: { $cond: [paid, NET, 0] } },
-        refunded: { $sum: { $cond: [refundedPayment, '$amount', 0] } },
+        gross: { $sum: KEPT },
+        platformFees: { $sum: FEE },
+        organizerNet: { $sum: NET },
+        refunded: { $sum: REFUNDED },
         payments: { $sum: { $cond: [paid, 1, 0] } },
-        refunds: { $sum: { $cond: [refundedPayment, 1, 0] } },
+        tickets: { $sum: { $cond: [paid, KEPT_TICKETS, 0] } },
+        refunds: { $sum: REFUNDED_TICKETS },
         lastPaymentAt: { $max: '$processedAt' },
       },
     },
@@ -295,6 +309,7 @@ async function revenueByEvent({ from, to, q, sort = 'gross', limit, skip } = {})
               organizerNet: 1,
               refunded: 1,
               payments: 1,
+              tickets: 1,
               refunds: 1,
               lastPaymentAt: 1,
               payout: { $ifNull: [{ $first: '$payout' }, null] },

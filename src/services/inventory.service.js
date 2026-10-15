@@ -2,15 +2,18 @@
 import TicketType from '../models/TicketType.js';
 import Registration from '../models/Registration.js';
 
-// Atomically takes one seat. Returns the updated ticket type, or null when sold out.
-// The sold < quantity condition is what stops two buyers taking the last seat.
-function claimSeat(ticketTypeId, session) {
+// Atomically takes `count` seats, all or nothing. Returns the updated ticket type, or null
+// when fewer than `count` are left. The sold + count <= quantity condition is what stops
+// two buyers taking the last seat.
+function claimSeats(ticketTypeId, count, session) {
   return TicketType.findOneAndUpdate(
-    { _id: ticketTypeId, $expr: { $lt: ['$sold', '$quantity'] } },
-    { $inc: { sold: 1 } },
+    { _id: ticketTypeId, $expr: { $lte: [{ $add: ['$sold', count] }, '$quantity'] } },
+    { $inc: { sold: count } },
     { new: true, session }
   );
 }
+
+const claimSeat = (ticketTypeId, session) => claimSeats(ticketTypeId, 1, session);
 
 function releaseSeat(ticketTypeId, session) {
   return TicketType.updateOne({ _id: ticketTypeId, sold: { $gt: 0 } }, { $inc: { sold: -1 } }, { session });
@@ -47,5 +50,5 @@ async function allocatedQuantity(eventId, excludeTicketId) {
   return total;
 }
 
-export { claimSeat, releaseSeat, cancelRegistration, allocatedQuantity, HOLDS_SEAT };
-export default { claimSeat, releaseSeat, cancelRegistration, allocatedQuantity, HOLDS_SEAT };
+export { claimSeat, claimSeats, releaseSeat, cancelRegistration, allocatedQuantity, HOLDS_SEAT };
+export default { claimSeat, claimSeats, releaseSeat, cancelRegistration, allocatedQuantity, HOLDS_SEAT };

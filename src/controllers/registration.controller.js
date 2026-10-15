@@ -3,18 +3,34 @@ import payments from '../services/payment.service.js';
 import checkin from '../services/checkin.service.js';
 import { send, pageParams } from '../utils/http.js';
 
+// The single-ticket fields (registrationId, qrToken, qrUrl) describe the first ticket so older
+// clients keep working; `tickets` lists every ticket of the order.
 export const register = async (req, res) => {
-  const { registration, checkoutUrl, httpStatus } = await registrations.register(
+  const { registrations: regs, checkoutUrl, httpStatus } = await registrations.register(
     req.user.id,
     req.params.id,
-    req.body.ticketTypeId
+    req.body.ticketTypeId,
+    req.body.quantity
   );
-  const data = { registrationId: registration._id, status: registration.status };
+  const [first] = regs;
+  const confirmed = first.status === 'confirmed';
+  const data = {
+    registrationId: first._id,
+    registrationIds: regs.map((r) => r._id),
+    orderId: first.order,
+    quantity: regs.length,
+    status: first.status,
+    tickets: regs.map((r) => ({
+      registrationId: r._id,
+      status: r.status,
+      ...(confirmed ? { qrToken: r.qrToken, qrUrl: `/api/v1/registrations/${r._id}/qr` } : {}),
+    })),
+  };
   if (checkoutUrl) data.checkoutUrl = checkoutUrl;
-  if (registration.holdExpiresAt) data.holdExpiresAt = registration.holdExpiresAt;
-  if (registration.status === 'confirmed') {
-    data.qrToken = registration.qrToken;
-    data.qrUrl = `/api/v1/registrations/${registration._id}/qr`;
+  if (first.holdExpiresAt) data.holdExpiresAt = first.holdExpiresAt;
+  if (confirmed) {
+    data.qrToken = first.qrToken;
+    data.qrUrl = `/api/v1/registrations/${first._id}/qr`;
   }
   send(res, httpStatus, data);
 };
@@ -41,6 +57,8 @@ export const mine = async (req, res) => {
 
 export const initializePayment = async (req, res) =>
   send(res, 200, await payments.initializeForUser(req.user.id, req.body.registrationId));
+
+export const verifyPayment = async (req, res) => send(res, 200, await payments.verifyForUser(req.user.id, req.body.reference));
 
 // Paystack expects a quick 200. Signature failures return 401 so they show up in its dashboard.
 export const webhook = async (req, res) => {

@@ -16,8 +16,9 @@ const router = express.Router();
 const naira = (kobo, currency) =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency: currency || 'NGN' }).format(kobo / 100);
 
-const page = (title, body) => `<!doctype html>
+const page = (title, body, redirectTo) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+${redirectTo ? `<meta http-equiv="refresh" content="3;url=${escapeHtml(redirectTo)}">` : ''}
 <title>${escapeHtml(title)}</title>
 <style>
   body{font-family:system-ui,sans-serif;background:#f4f6f8;margin:0;padding:24px 16px;color:#1b1f24}
@@ -81,7 +82,10 @@ router.post(
 
     if (!req.is('application/x-www-form-urlencoded')) return send(res, 200, { outcome, ...result });
 
-    const back = `${env.CLIENT_ORIGINS[0]}/payments/callback?reference=${encodeURIComponent(p.reference)}`;
+    // Same shape as Paystack's redirect: <callback>?trxref=<ref>&reference=<ref>
+    const back = new URL(env.PAYSTACK_CALLBACK_URL);
+    back.searchParams.set('trxref', p.reference);
+    back.searchParams.set('reference', p.reference);
     let heading = 'Payment declined. Your seat has been released.';
     if (result.duplicate) heading = 'This payment was already processed.';
     else if (result.confirmed) heading = 'Payment successful. Your ticket is on its way by email.';
@@ -93,7 +97,9 @@ router.post(
           'Demo checkout',
           `<span class="tag">PAYSTACK DEMO</span><h1>${escapeHtml(heading)}</h1>
 <div class="muted">Reference: ${escapeHtml(p.reference)}</div>
-<p><a href="${escapeHtml(back)}">Back to the app</a></p>`
+<p class="muted">Taking you back to the app…</p>
+<p><a href="${escapeHtml(back.href)}">Continue now</a></p>`,
+          back.href
         )
       );
   })

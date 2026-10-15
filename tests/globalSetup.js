@@ -2,7 +2,11 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
 // One single-node replica set for the whole run. Transactions need a replica set.
 export default async () => {
-  const replSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } });
+  const replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+    // The default 10s is too tight on a busy laptop or CI runner.
+    instanceOpts: [{ launchTimeout: 60000 }],
+  });
   globalThis.__MONGO_REPLSET__ = replSet;
   process.env.MONGO_TEST_URI = replSet.getUri();
 };

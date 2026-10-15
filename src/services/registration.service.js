@@ -1,10 +1,11 @@
+import mongoose from 'mongoose';
 import env from '../config/env.js';
 import Event from '../models/Event.js';
 import TicketType from '../models/TicketType.js';
 import Registration from '../models/Registration.js';
 import AppError from '../utils/AppError.js';
 import { withTransaction } from '../utils/transaction.js';
-import { claimSeat, cancelRegistration, HOLDS_SEAT } from './inventory.service.js';
+import { claimSeats, cancelRegistration, HOLDS_SEAT } from './inventory.service.js';
 import { newQrToken, qrPng } from './qr.service.js';
 import { isOwnerOrAdmin } from './access.js';
 import payments from './payment.service.js';
@@ -20,71 +21,62 @@ function assertRegistrable(event, ticket, now) {
   }
 }
 
-// Registers a user for an event. Returns { registration, checkoutUrl?, httpStatus }.
-async function register(userId, eventId, ticketTypeId) {
+// Buys `quantity` tickets of one type in a single order. Each ticket is its own registration
+// (one seat, one QR code); the same person can place further orders later.
+// Seats are claimed all-or-nothing: if fewer are left than asked for, nothing is taken.
+// Returns { registrations, checkoutUrl?, httpStatus }.
+async function register(userId, eventId, ticketTypeId, quantity = 1) {
   const now = new Date();
+  if (quantity > env.MAX_TICKETS_PER_ORDER) {
+    throw AppError.badRequest('VALIDATION_ERROR', `You can buy at most ${env.MAX_TICKETS_PER_ORDER} tickets per order`, [
+      { field: 'quantity', message: `must be at most ${env.MAX_TICKETS_PER_ORDER}` },
+    ]);
+  }
   const event = await Event.findById(eventId);
   if (!event) throw AppError.notFound('Event');
   const ticket = await TicketType.findOne({ _id: ticketTypeId, event: event._id });
   if (!ticket) throw AppError.notFound('Ticket type');
   assertRegistrable(event, ticket, now);
   const isFree = ticket.price === 0;
+  const order = new mongoose.Types.ObjectId();
 
-  const registration = await withTransaction(async (session) => {
-    const existing = await Registration.findOne({ event: event._id, user: userId }).session(session);
-    if (existing && existing.status !== 'cancelled') {
-      throw AppError.conflict('ALREADY_REGISTERED', 'You are already registered for this event');
-    }
-
-    const seat = await claimSeat(ticket._id, session);
+  const registrations = await withTransaction(async (session) => {
     let fields;
-    if (!seat) fields = { status: 'waitlisted', waitlistedAt: now };
-    else if (isFree) fields = { status: 'confirmed', qrToken: newQrToken() };
-    else fields = { status: 'pending', holdExpiresAt: new Date(now.getTime() + env.HOLD_MINUTES * 60 * 1000) };
-
-    if (existing) {
-      // Re-registering after a cancellation reuses the document (event + user is unique).
-      // If it stopped being 'cancelled' meanwhile, throwing aborts the transaction and the seat claim.
-      const reused = await Registration.findOneAndUpdate(
-        { _id: existing._id, status: 'cancelled' },
-        {
-          $set: { ticketType: ticket._id, ...fields },
-          $unset: { cancelledAt: 1, cancelReason: 1, checkedInAt: 1, reminderSentAt: 1 },
-        },
-        { new: true, session }
-      );
-      if (!reused) throw AppError.conflict('ALREADY_REGISTERED', 'You are already registered for this event');
-      return reused;
+    if (await claimSeats(ticket._id, quantity, session)) {
+      fields = isFree
+        ? () => ({ status: 'confirmed', qrToken: newQrToken() })
+        : () => ({ status: 'pending', holdExpiresAt: new Date(now.getTime() + env.HOLD_MINUTES * 60 * 1000) });
+    } else {
+      const current = await TicketType.findById(ticket._id, 'sold quantity').session(session);
+      const left = Math.max(0, current.quantity - current.sold);
+      if (left > 0) {
+        throw AppError.conflict('NOT_ENOUGH_TICKETS', `Only ${left} ${ticket.name} ${left === 1 ? 'ticket is' : 'tickets are'} left`);
+      }
+      fields = () => ({ status: 'waitlisted', waitlistedAt: now }); // sold out: join the waitlist
     }
-    const [created] = await Registration.create(
-      [{ event: event._id, user: userId, ticketType: ticket._id, ...fields }],
-      { session }
-    );
-    return created;
-  }).catch((err) => {
-    if (err && err.code === 11000) {
-      throw AppError.conflict('ALREADY_REGISTERED', 'You are already registered for this event');
-    }
-    throw err;
+    const docs = Array.from({ length: quantity }, () => ({ event: event._id, user: userId, ticketType: ticket._id, order, ...fields() }));
+    return Registration.create(docs, { session, ordered: true });
   });
 
-  if (registration.status === 'waitlisted') {
-    await notify.waitlisted(registration._id);
-    return { registration, httpStatus: 202 };
+  const ids = registrations.map((r) => r._id);
+  const [first] = registrations;
+  if (first.status === 'waitlisted') {
+    await notify.waitlisted(first._id);
+    return { registrations, httpStatus: 202 };
   }
-  if (registration.status === 'confirmed') {
-    await notify.ticket(registration._id);
-    return { registration, httpStatus: 201 };
+  if (first.status === 'confirmed') {
+    await notify.tickets(ids);
+    return { registrations, httpStatus: 201 };
   }
 
-  // Paid: the seat is held while the attendee pays.
+  // Paid: the seats are held while the attendee pays for the whole order in one checkout.
   try {
-    const { checkoutUrl } = await payments.startCheckout(registration._id);
-    return { registration, checkoutUrl, httpStatus: 201 };
+    const { checkoutUrl } = await payments.startCheckout(ids);
+    return { registrations, checkoutUrl, httpStatus: 201 };
   } catch (err) {
-    await withTransaction((session) =>
-      cancelRegistration({ _id: registration._id }, ['pending'], 'payment_failed', session)
-    );
+    for (const id of ids) {
+      await withTransaction((session) => cancelRegistration({ _id: id }, ['pending'], 'payment_failed', session));
+    }
     await waitlist.promoteNext(ticket._id);
     throw err;
   }
@@ -106,6 +98,14 @@ async function cancel(user, registrationId) {
     cancelRegistration({ _id: reg._id }, ['pending', 'confirmed', 'waitlisted'], reason, session)
   );
   if (!before) throw AppError.conflict('CANNOT_CANCEL', `A ${reg.status} registration cannot be cancelled`);
+
+  // Unpaid tickets of an order share one checkout, so the rest of the unpaid order goes too.
+  if (before.status === 'pending' && before.order) {
+    const siblings = await Registration.find({ order: before.order, status: 'pending', _id: { $ne: before._id } }, '_id');
+    for (const s of siblings) {
+      await withTransaction((session) => cancelRegistration({ _id: s._id }, ['pending'], reason, session));
+    }
+  }
 
   if (before.status === 'confirmed' && (reg.event.refundPolicy === 'full' || !isAttendee)) {
     await payments.refundSuccessfulPayments(reg._id);
