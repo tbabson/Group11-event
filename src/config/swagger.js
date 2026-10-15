@@ -26,7 +26,8 @@ export default {
     title: 'Event Registration & Management API',
     version: '1.0.0',
     description:
-      'Organizers create events and ticket types. Attendees register (free) or pay with Paystack (paid). ' +
+      'Organizers create events and ticket types. Attendees register (free) or pay with Paystack (paid), ' +
+      'up to 10 tickets per order and as many orders as they like; every ticket has its own QR code. ' +
       'Errors always look like `{ success: false, error: { code, message, details } }`. ' +
       'Prices are in the smallest currency unit (kobo).',
   },
@@ -137,6 +138,9 @@ export default {
       post: {
         tags: ['Events'],
         summary: 'Upload banner image (multipart field "banner")',
+        description:
+          'JPEG, PNG or WebP up to 5 MB. Stored at exactly 1080 × 608 px (16:9; BANNER_WIDTH × BANNER_HEIGHT), ' +
+          'cropped to fill, so upload a 16:9 image of at least that size for the best result.',
         security: bearer,
         parameters: [id],
         requestBody: { content: { 'multipart/form-data': { schema: obj({ banner: { type: 'string', format: 'binary' } }) } } },
@@ -152,16 +156,37 @@ export default {
     '/events/{id}/register': {
       post: {
         tags: ['Registration'],
-        summary: 'Register or buy a ticket',
-        description: '201 confirmed (free) or pending with checkoutUrl (paid); 202 waitlisted when sold out.',
+        summary: 'Register or buy tickets (one order)',
+        description:
+          'Buys `quantity` tickets of one type (1–10, default 1). Each ticket is its own registration with its own QR code; ' +
+          'the same person can place more orders later, including other tiers.\n\n' +
+          '- **201** free: all tickets `confirmed` (one email with every QR code).\n' +
+          '- **201** paid: all tickets `pending`, held 15 min, with one `checkoutUrl` for the whole order.\n' +
+          '- **202** tier sold out: every ticket joins the waitlist.\n' +
+          '- **409 NOT_ENOUGH_TICKETS**: fewer left than requested; nothing is taken (all-or-nothing).\n\n' +
+          'Response: `registrationId`, `qrToken`, `qrUrl` describe the first ticket; `tickets[]` lists every ticket ' +
+          '(`registrationId`, `status`, and `qrToken`/`qrUrl` when confirmed); also `registrationIds`, `orderId`, `quantity`.',
         security: bearer,
         parameters: [id],
-        requestBody: json(obj({ ticketTypeId: str }, ['ticketTypeId'])),
-        responses: { 201: ok('Confirmed or pending'), 202: ok('Waitlisted'), ...errors },
+        requestBody: json(
+          obj({ ticketTypeId: str, quantity: { type: 'integer', minimum: 1, maximum: 10, default: 1, example: 3 } }, ['ticketTypeId'])
+        ),
+        responses: { 201: ok('Confirmed (free) or pending with checkoutUrl (paid)'), 202: ok('Waitlisted'), ...errors },
       },
     },
     '/registrations/{id}': {
-      delete: { tags: ['Registration'], summary: 'Cancel a registration (attendee or organizer)', security: bearer, parameters: [id], responses: { 200: ok(), ...errors } },
+      delete: {
+        tags: ['Registration'],
+        summary: 'Cancel a ticket (attendee or organizer)',
+        description:
+          '- **Confirmed** ticket: only this ticket is cancelled; other tickets of the order stay valid. A paid ticket is refunded ' +
+          "just its share (Paystack partial refund) if the event's refund policy is `full`, or always when the organizer cancels.\n" +
+          '- **Pending** (unpaid) ticket: tickets of an order share one checkout, so the whole unpaid order is cancelled and its seats freed.\n' +
+          '- **Waitlisted** ticket: removed from the waitlist.',
+        security: bearer,
+        parameters: [id],
+        responses: { 200: ok('The cancelled registration'), ...errors },
+      },
     },
     '/registrations/{id}/qr': {
       get: {
@@ -177,6 +202,22 @@ export default {
         responses: {
           200: { description: 'PNG image', content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } },
           ...errors,
+        },
+      },
+    },
+    '/payments/verify': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Confirm a payment with Paystack (payment callback page)',
+        description:
+          'Asks Paystack for the real status of the charge and applies it like the webhook would: success confirms every ticket ' +
+          'of the order, failed cancels them. Safe to repeat. Same as GET /transactions/verify/{reference}.',
+        security: bearer,
+        requestBody: json(obj({ reference: str }, ['reference'])),
+        responses: {
+          200: ok('{ paymentStatus, registrationStatus, registrationIds, quantity, confirmedTickets, event }'),
+          ...errors,
+          502: ok('Paystack unavailable'),
         },
       },
     },
