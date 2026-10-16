@@ -157,3 +157,31 @@ describe('paid orders', () => {
     expect(init.body.data.reference).toBe(payment.reference);
   });
 });
+
+describe('cancelling an event with multi-ticket orders', () => {
+  it('cancels every ticket, refunds each paid ticket once and finishes promptly', async () => {
+    const { refund } = mockPaystack();
+    const { organizer, event, ticket: vip } = await setupEvent({ ticket: paidTicket({ quantity: 10 }), event: { refundPolicy: 'full' } });
+    const [a, b] = await Promise.all([createUser('attendee'), createUser('attendee')]);
+
+    const orderA = await buy(a, event, vip, 2);
+    const orderB = await buy(b, event, vip, 2);
+    for (const o of [orderA, orderB]) {
+      const p = await Payment.findOne({ registration: o.body.data.registrationId });
+      await payDemo(p.reference).expect(200);
+    }
+    // One ticket of order A already refunded before the event is cancelled.
+    await api().delete(`/api/v1/registrations/${orderA.body.data.registrationIds[0]}`).set(a.auth).expect(200);
+
+    const started = Date.now();
+    const res = await api().delete(`/api/v1/events/${event._id}`).set(organizer.auth);
+    expect(res.status).toBe(200);
+    expect(Date.now() - started).toBeLessThan(10000);
+
+    expect(await Registration.countDocuments({ event: event._id, status: { $ne: 'cancelled' } })).toBe(0);
+    const payments = await Payment.find({ event: event._id });
+    expect(payments.map((p) => p.status).sort()).toEqual(['refunded', 'refunded']);
+    expect(payments.every((p) => p.refundedAmount === p.amount)).toBe(true);
+    expect(refund).toHaveBeenCalledTimes(4); // one call per paid ticket, never twice
+  });
+});

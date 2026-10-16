@@ -198,6 +198,23 @@ describe('ticket types', () => {
   });
 });
 
+describe('live events (when=)', () => {
+  it('lists happening-now events separately from upcoming ones', async () => {
+    const org = await createUser('organizer');
+    await createEvent(org.user, { title: 'On right now', startAt: new Date(Date.now() - HOUR), endAt: new Date(Date.now() + HOUR) });
+    await createEvent(org.user, { title: 'Later this week' });
+    await createEvent(org.user, { title: 'Already over', startAt: new Date(Date.now() - 3 * HOUR), endAt: new Date(Date.now() - HOUR) });
+    await createEvent(org.user, { title: 'Live draft', status: 'draft', startAt: new Date(Date.now() - HOUR), endAt: new Date(Date.now() + HOUR) });
+    const titles = async (qs) => (await api().get(`/api/v1/events?${qs}`)).body.data.map((e) => e.title).sort();
+
+    expect(await titles('')).toEqual(['Later this week']); // default stays "upcoming"
+    expect(await titles('when=upcoming')).toEqual(['Later this week']);
+    expect(await titles('when=live')).toEqual(['On right now']);
+    expect(await titles('when=current')).toEqual(['Later this week', 'On right now']);
+    expect((await api().get('/api/v1/events?when=yesterday')).status).toBe(400);
+  });
+});
+
 describe('discovery', () => {
   let org;
   beforeEach(async () => {

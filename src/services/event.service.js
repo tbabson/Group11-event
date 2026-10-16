@@ -161,7 +161,17 @@ async function search(query, { limit, skip }, sort) {
     if (query.from) filter.startAt.$gte = query.from;
     if (query.to) filter.startAt.$lte = query.to;
   } else {
-    filter.startAt = { $gte: new Date() };
+    // when: upcoming (default) = not started yet; live = started and not ended;
+    // current = live + upcoming (anything not over yet).
+    const now = new Date();
+    if (query.when === 'live') {
+      filter.startAt = { $lte: now };
+      filter.endAt = { $gt: now };
+    } else if (query.when === 'current') {
+      filter.endAt = { $gt: now };
+    } else {
+      filter.startAt = { $gte: now };
+    }
   }
   if (query.isFree !== undefined || query.minPrice !== undefined || query.maxPrice !== undefined) {
     const price = {};

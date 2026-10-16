@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Event Registration & Management API",
-    "description": "Requests for every endpoint of the Group11 event API (`/api/v1`).\n\n1. Import this collection and `local.postman_environment.json`, select the \"Event API – Local\" environment.\n2. Start the API (`npm run dev`).\n3. Run the folders in order (or use the Collection Runner). Tokens and ids are saved automatically.\n\nAttendees can buy up to 10 tickets per order and place more orders later; each ticket has its own QR code.\n\nEvery response uses `{ success, data, meta? }` or `{ success: false, error: { code, message, details } }`. Prices are in kobo.",
+    "description": "# Event Registration & Management API: guided demonstration\n\nRun the folders **top to bottom** (or **Run collection**). Every request checks its response and saves the tokens and ids the next steps need, so the whole story plays out on its own against a running API.\n\n**The story**\n1. **Health:** the API is up and connected to MongoDB.\n2. **Auth:** an organizer and two attendees sign up; tokens are saved automatically. Admin login uses an existing admin account.\n3. **Events & tickets:** the organizer creates a draft event, adds a free and a paid VIP tier, publishes it, and it appears in search, including the live/upcoming filters.\n4. **Registration:** an attendee reserves 1 free ticket, then buys 3 more in one order (each with its own QR code); the second attendee buys 2 VIP tickets in one checkout. Orders over 10 are refused.\n5. **Payments (Paystack demo):** the VIP order is paid on the demo checkout, verified, and duplicate or forged webhooks are rejected or ignored.\n6. **Transactions:** checkout through the RepairHub-style routes, then the money ledger as the attendee, the organizer and the admin see it.\n7. **Check-in:** QR codes are scanned at the door; each works once.\n8. **Reports:** stats with the money summary, attendee list and CSV; attendees can't see them.\n9. **Payouts:** the organizer adds a bank account; earnings are paid 3 days after the event.\n10. **Admin:** users, platform revenue, payouts and event moderation.\n11. **Cleanup:** one VIP ticket is cancelled and refunded (only its share), then the event is cancelled.\n\n**Setup**\n- Select the **Event API – Local** environment (baseUrl `http://localhost:4001/api/v1`), and start the API with `npm run dev`.\n- Payments must run in demo mode (`PAYSTACK_MOCK=true`, or no Paystack key) for folders 4–4b to complete without a real card.\n- For folder 8, put a real admin's login in `adminEmail` / `adminPassword` (make a user admin in MongoDB: `role: \"admin\"`).\n- Every response is `{ success, data, meta? }` or `{ success: false, error: { code, message, details } }`. Prices are in kobo (500000 = ₦5,000).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -154,7 +154,7 @@
   "item": [
     {
       "name": "0. Health",
-      "description": "Is the API up and connected to MongoDB?",
+      "description": "Start here: confirms the API is running and connected to MongoDB.",
       "item": [
         {
           "name": "Health check",
@@ -191,7 +191,7 @@
     },
     {
       "name": "1. Auth",
-      "description": "Sign-up and login save tokens into collection variables, so later requests are authenticated automatically.",
+      "description": "Sign-up and login. Tokens are saved into collection variables (organizerToken, attendeeToken, attendee2Token, adminToken) and used by every later request. Refresh tokens rotate on every use.",
       "item": [
         {
           "name": "Register organizer",
@@ -624,7 +624,7 @@
     },
     {
       "name": "2. Events & tickets",
-      "description": "Organizer creates a draft event, adds a free and a paid ticket type, then publishes it.",
+      "description": "The organizer creates a draft event (it starts a week from now), adds a free and a paid VIP tier, then publishes it. Search shows it, including the live / upcoming filters. Banner uploads are stored at 1080 × 608 px.",
       "item": [
         {
           "name": "Create event",
@@ -1096,6 +1096,97 @@
           }
         },
         {
+          "name": "Happening now (when=live)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('only events in progress', () => {",
+                  "  const now = Date.now();",
+                  "  pm.response.json().data.forEach((e) => {",
+                  "    pm.expect(new Date(e.startAt).getTime()).to.be.at.most(now);",
+                  "    pm.expect(new Date(e.endAt).getTime()).to.be.above(now);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Events that have started and not yet ended: what the homepage \"Happening now\" section and the \"Happening now\" filter show. Empty when nothing is live.",
+            "url": {
+              "raw": "{{baseUrl}}/events?when=live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "when",
+                  "value": "live"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Live & upcoming (when=current)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test('nothing that has already ended', () => {",
+                  "  pm.response.json().data.forEach((e) => pm.expect(new Date(e.endAt).getTime()).to.be.above(Date.now()));",
+                  "});",
+                  "pm.test('includes our new event', () => {",
+                  "  pm.expect(pm.response.json().data.map((e) => e._id)).to.include(pm.collectionVariables.get('eventId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Everything that is not over yet. The default (when=upcoming) lists only events that have not started.",
+            "url": {
+              "raw": "{{baseUrl}}/events?when=current&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "when",
+                  "value": "current"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "Get event by slug",
           "event": [
             {
@@ -1131,7 +1222,7 @@
     },
     {
       "name": "3. Registration",
-      "description": "Free tickets confirm instantly with a QR token; paid tickets return a checkout URL and hold the seat for 15 minutes.",
+      "description": "Free tickets confirm at once; paid ones are held for 15 minutes while the buyer pays. Up to 10 tickets per order, as many orders as you like; each ticket has its own QR code.",
       "item": [
         {
           "name": "Register free ticket",
@@ -1473,7 +1564,7 @@
     },
     {
       "name": "4. Payments (Paystack demo)",
-      "description": "Complete the paid registration without a Paystack account. Works when the API runs with PAYSTACK_MODE=demo (the default).",
+      "description": "Completes the VIP order on the demo checkout (no real money), verifies it with POST /payments/verify, and shows that duplicate webhooks are ignored and forged ones rejected (401).",
       "item": [
         {
           "name": "Initialize / resume checkout",
@@ -1848,7 +1939,7 @@
     },
     {
       "name": "4b. Transactions (RepairHub layout)",
-      "description": "Pay / verify through /transactions/*, and read the money ledger (every payment, platform fee, refund and payout).",
+      "description": "The same payment flow through /transactions/*, then the money ledger: every ticket payment, platform fee, refund and payout, as the attendee, the organizer and the admin see it.",
       "item": [
         {
           "name": "Buy 2 VIP tickets, pay later",
@@ -2192,7 +2283,7 @@
     },
     {
       "name": "5. Check-in",
-      "description": "Organizer scans the QR token at the door. A ticket can be used once.",
+      "description": "The organizer scans tickets at the door. Each QR code works once; a second scan is refused (409 TICKET_ALREADY_USED).",
       "item": [
         {
           "name": "Check in attendee",
@@ -2361,7 +2452,7 @@
     },
     {
       "name": "6. Reports",
-      "description": "Organizer dashboard data for their own event.",
+      "description": "Organizer dashboard data: registrations by status, revenue after refunds, platform fee, check-in rate, attendee list and CSV export. Attendees get 403.",
       "item": [
         {
           "name": "Event stats",
@@ -2542,7 +2633,7 @@
     },
     {
       "name": "7. Payouts",
-      "description": "Organizer bank account and payouts (paid after the event ends + hold period).",
+      "description": "The organizer adds a bank account. Earnings (ticket sales minus the 5% fee) are held until 3 days after the event, then transferred.",
       "item": [
         {
           "name": "Set payout account",
@@ -2640,7 +2731,7 @@
     },
     {
       "name": "8. Admin",
-      "description": "Requires the \"Login (admin)\" request to have succeeded.",
+      "description": "Admin-only views: users, platform revenue, payouts (with retry) and changing any event status. Needs the admin login from folder 1.",
       "item": [
         {
           "name": "List users",
@@ -2906,7 +2997,7 @@
     },
     {
       "name": "9. Cleanup",
-      "description": "Run last. Cancels the paid ticket (refunded: event policy is \"full\") and cancels the event.",
+      "description": "Cancels one VIP ticket: only its ₦5,000 share is refunded and the other ticket stays valid. Then logs out and cancels the event (attendees are refunded and notified).",
       "item": [
         {
           "name": "Cancel one VIP ticket (refunds only its share)",

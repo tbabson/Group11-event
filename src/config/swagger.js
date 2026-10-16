@@ -120,6 +120,12 @@ export default {
           { name: 'minPrice', in: 'query', schema: int },
           { name: 'maxPrice', in: 'query', schema: int },
           { name: 'isFree', in: 'query', schema: { type: 'boolean' } },
+          {
+            name: 'when',
+            in: 'query',
+            schema: { type: 'string', enum: ['upcoming', 'live', 'current'], default: 'upcoming' },
+            description: 'upcoming = not started yet; live = happening now (started, not ended); current = live + upcoming. Ignored when from/to are given.',
+          },
         ],
         responses: { 200: ok('Events with meta { page, limit, total }') },
       },

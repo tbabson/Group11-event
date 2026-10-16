@@ -75,6 +75,7 @@ const events = {
     city: z.string().trim().max(100).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
+    when: z.enum(['upcoming', 'live', 'current']).default('upcoming'),
     minPrice: z.coerce.number().int().min(0).optional(),
     maxPrice: z.coerce.number().int().min(0).optional(),
     isFree: boolString,
